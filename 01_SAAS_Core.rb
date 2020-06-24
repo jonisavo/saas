@@ -4,7 +4,7 @@
 #==============================================================================#
 # Written by Savordez
 # Marin's Utilities are required!
-# Special thanks to Marin (utilites script & input_to_args code) and Roza (mkxp-z)
+# Special thanks to Marin (utilities script & input_to_args code) and Roza (mkxp-z)
 # Marin's Utilities: https://reliccastle.com/resources/165/
 # mkxp-z: https://github.com/inori-z/mkxp-z
 
