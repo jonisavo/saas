@@ -7,8 +7,18 @@
 class ApplicationWindow < ConsoleWindow
   # Creates a new ApplicationWindow object.
   # @param session [ConsoleApplication] associated application session
-  # @param viewport [Viewport] viewport to attach the window into
-  def initialize(session, viewport)
+  # @param smth [Viewport,Rect,Array<Integer>] window dimensions (x, y, width, height or Rect) or a Viewport
+  def initialize(session,*smth)
+    if smth[0].is_a?(Viewport)
+      viewport = smth[0]
+    elsif smth[0].is_a?(Rect)
+      viewport = Viewport.new(smth[0])
+    elsif smth[0].is_a?(Integer) && smth[1].is_a?(Integer) && smth[2].is_a?(Integer) && smth[3].is_a?(Integer)
+      viewport = Viewport.new(smth[0],smth[1],smth[2],smth[3])
+    else
+      raise ArgumentError, 'invalid argument(s) for ApplicationWindow'
+    end
+    viewport.z = 9999
     super(session, viewport)
     @border_sprite = BitmapSprite.new(viewport.rect.width, viewport.rect.height,@viewport)
   end
@@ -37,10 +47,23 @@ class ApplicationWindow < ConsoleWindow
     @text_entry.width = self.viewport.rect.width-@text_entry.x
   end
 
+  # Returns the width of the application window.
+  # @return [Integer] window width
+  def width
+    return self.viewport.rect.width
+  end
+
+  # Returns the height of the application window.
+  # @return [Integer] window height
+  def height
+    return self.viewport.rect.height
+  end
+
   # Disposes the window.
   def dispose
-    @border_sprite.dispose
     super
+    @border_sprite.dispose
+    @viewport.dispose
   end
 
   private
@@ -98,6 +121,47 @@ class ApplicationWindow < ConsoleWindow
         end
       end
     end
+  end
+end
+
+class Window_CommandApplication < Window_CommandPokemonEx
+  # Creates a new Window_CommandConsole object.
+  # @param window [ApplicationWindow] window to bind to
+  # @param choices [*String] window choices
+  def initialize(window,*choices)
+    @window = window
+    super(build_list(choices),window.width)
+    self.viewport = @window.viewport
+    self.windowskin = nil
+    self.contents.font.name = @window.fontName
+    self.contents.font.size = 20
+  end
+
+  # Changes the command window's choices.
+  # @param choices [Array<String>] new choices
+  def setChoices(*choices)
+    self.commands = build_list(choices)
+  end
+
+  def drawItem(index,count,rect)
+    rect = drawCursor(index,rect)
+    if index == self.index
+      self.contents.fill_rect(rect,@window.textColor)
+      text_col = @window.bgColor
+    else
+      text_col = @window.textColor
+    end
+    pbDrawShadowText(self.contents,rect.x,rect.y,rect.width,rect.height,@commands[index],text_col,nil)
+  end
+
+  private
+
+  # Builds the list of choices.
+  # This function should be overwritten by subclasses.
+  # @param [Array<String>] choices
+  # @return [Array<String>] list of choices
+  def build_list(choices)
+    return choices
   end
 end
 
@@ -180,12 +244,12 @@ class ConsoleApplication < ConsoleSession
     @viewport.z = 99999
     # Force the default config if the setting is set, otherwise get the active configuration.
     if self.force_default_config?
-      @config = $SystemData.shellConfigs['default']
+      @config = $ShellOptions.shellConfigs['default']
     else
-      @config = $SystemData.shellConfigs[$SystemData.activeConfig]
+      @config = $ShellOptions.shellConfigs[$ShellOptions.activeConfig]
     end
     @prompt = @config.prompt
-    @aliases = $SystemData.shellAliases
+    @aliases = $ShellOptions.shellAliases
     @commands = {}
     self.set_commands
     @context = nil
@@ -201,9 +265,8 @@ class ConsoleApplication < ConsoleSession
       # ignored
     rescue ConsoleError
       # ignored
-    ensure
-      self.app_exit
     end
+    self.app_exit
     self.exit_session
   end
 
@@ -257,20 +320,54 @@ class ConsoleApplication < ConsoleSession
   end
 end
 
+class ConsoleApplication_Menu < ConsoleApplication
+  name 'menu'
+  force_default_config
+
+  def app_start
+    @list_window = ApplicationWindow.new(self,Graphics.width/2-128,Graphics.height/2-128,128,128)
+    @list_window.drawBorder(2)
+    @list = Window_CommandApplication.new(@list_window,_INTL('Start game'),_INTL('Continue'),_INTL('Options'),_INTL('Exit'))
+    @msg_window = ApplicationWindow.new(self,Graphics.width/2-128,Graphics.height-180,128,180)
+  end
+
+  def app_main
+    loop do
+      Graphics.update
+      Input.update
+      @list.update
+      next unless Input.trigger?(Input::C)
+      case @list.index
+      when 0
+        @msg_window.print("Start game was pressed!")
+      when 1
+        @msg_window.print("Continue was pressed!")
+      when 2
+        @msg_window.print("Options was pressed!")
+      else
+        break
+      end
+    end
+  end
+
+  def app_exit
+    @list.dispose
+    @list_window.dispose
+    @msg_window.dispose
+  end
+end
+
 class ConsoleApplication_Jukebox < ConsoleApplication
   name 'jukebox'
   force_default_config
 
   def app_start
     # create sprites etc
-    @header_viewport = Viewport.new(0,0,Graphics.width,CONSOLE_LINE_HEIGHT*4)
-    @header_window = ApplicationWindow.new(self,@header_viewport)
+    @header_window = ApplicationWindow.new(self,0,0,Graphics.width,CONSOLE_LINE_HEIGHT*4)
     @header_window.drawBorder(2)
-    @list_viewport = Viewport.new(0,CONSOLE_LINE_HEIGHT*4,Graphics.width,CONSOLE_LINE_HEIGHT * 8)
-    @list_window = ApplicationWindow.new(self,@list_viewport)
+    @list_window = ApplicationWindow.new(self,0,CONSOLE_LINE_HEIGHT*4,Graphics.width,CONSOLE_LINE_HEIGHT * 8)
     @list_window.drawBorder(2)
-    @command_viewport = Viewport.new(0,CONSOLE_LINE_HEIGHT * 12,Graphics.width,Graphics.height-CONSOLE_LINE_HEIGHT * 12)
-    @command_window = ApplicationWindow.new(self, @command_viewport)
+    @command_window = ApplicationWindow.new(self, 0,CONSOLE_LINE_HEIGHT * 12,Graphics.width,Graphics.height-CONSOLE_LINE_HEIGHT * 12)
     @command_window.drawBorder(2)
     # create variables
     @volume = $PokemonSystem.bgmvolume
