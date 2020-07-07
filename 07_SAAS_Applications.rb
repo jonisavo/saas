@@ -67,9 +67,71 @@ class ApplicationWindow < ConsoleWindow
   end
 end
 
+# A version of SpriteWindow_Selectable that removes the cursor sound effects.
+class SpriteWindow_Selectable_Console < SpriteWindow_Selectable
+  def update
+    super
+    if self.active and @item_max > 0 and @index >= 0 and !@ignore_input
+      if Input.repeat?(Input::UP)
+        if (Input.trigger?(Input::UP) && (@item_max%@column_max)==0) or
+            @index >= @column_max
+          oldindex = @index
+          @index = (@index - @column_max + @item_max) % @item_max
+          if @index != oldindex
+            update_cursor_rect
+          end
+        end
+      elsif Input.repeat?(Input::DOWN)
+        if (Input.trigger?(Input::DOWN) && (@item_max%@column_max)==0) or
+            @index < @item_max - @column_max
+          oldindex = @index
+          @index = (@index + @column_max) % @item_max
+          if @index != oldindex
+            update_cursor_rect
+          end
+        end
+      elsif Input.repeat?(Input::LEFT)
+        if @column_max >= 2 and @index > 0
+          oldindex = @index
+          @index -= 1
+          if @index != oldindex
+            update_cursor_rect
+          end
+        end
+      elsif Input.repeat?(Input::RIGHT)
+        if @column_max >= 2 and @index < @item_max - 1
+          oldindex = @index
+          @index += 1
+          if @index != oldindex
+            update_cursor_rect
+          end
+        end
+      elsif Input.repeat?(Input::L)
+        if self.index > 0
+          oldindex = @index
+          @index = [self.index-self.page_item_max, 0].max
+          if @index != oldindex
+            self.top_row -= self.page_row_max
+            update_cursor_rect
+          end
+        end
+      elsif Input.repeat?(Input::R)
+        if self.index < @item_max-1
+          oldindex = @index
+          @index = [self.index+self.page_item_max, @item_max-1].min
+          if @index != oldindex
+            self.top_row += self.page_row_max
+            update_cursor_rect
+          end
+        end
+      end
+    end
+  end
+end
+
 # A version of Window_DrawableCommand that does not have any animated arrows.
 # Also, the cursor is disabled by default, and can be set with the setCursor command.
-class Window_DrawableCommand_NoArrows < SpriteWindow_Selectable
+class Window_DrawableCommand_Console < SpriteWindow_Selectable_Console
   attr_reader :baseColor
   attr_reader :shadowColor
 
@@ -172,7 +234,7 @@ class Window_DrawableCommand_NoArrows < SpriteWindow_Selectable
   end
 end
 
-class Window_CommandConsole < Window_DrawableCommand_NoArrows
+class Window_CommandConsole < Window_DrawableCommand_Console
   attr_reader :commands
 
   # Creates a new Window_CommandConsole object.
@@ -412,17 +474,17 @@ class ConsoleApplication < ConsoleSession
   end
 end
 
-class ConsoleCommand_Testmenu < ConsoleCommand
-  name 'testmenu'
+class ConsoleCommand_Exampleapp < ConsoleCommand
+  name 'exampleapp'
 
   def main(args)
-    ConsoleApplication_Menu.new
+    ConsoleApplication_Example.new
     return 0
   end
 end
 
-class ConsoleApplication_Menu < ConsoleApplication
-  name 'menu'
+class ConsoleApplication_Example < ConsoleApplication
+  name 'example_app'
   force_default_config
 
   def app_start
@@ -455,57 +517,5 @@ class ConsoleApplication_Menu < ConsoleApplication
     @list.dispose
     @list_window.dispose
     @msg_window.dispose
-  end
-end
-
-class ConsoleApplication_Jukebox < ConsoleApplication
-  name 'jukebox'
-  force_default_config
-
-  def app_start
-    # create sprites etc
-    @header_window = ApplicationWindow.new(self,0,0,Graphics.width,CONSOLE_LINE_HEIGHT*4)
-    @header_window.drawBorder(2)
-    @list_window = ApplicationWindow.new(self,0,CONSOLE_LINE_HEIGHT*4,Graphics.width,CONSOLE_LINE_HEIGHT * 8)
-    @list_window.drawBorder(2)
-    @command_window = ApplicationWindow.new(self, 0,CONSOLE_LINE_HEIGHT * 12,Graphics.width,Graphics.height-CONSOLE_LINE_HEIGHT * 12)
-    @command_window.drawBorder(2)
-    # create variables
-    @volume = $PokemonSystem.bgmvolume
-  end
-
-  def app_main
-    # main loop
-  end
-
-  def app_exit
-    # dispose sprites etc
-  end
-
-  # Changes volume.
-  # @param vol [Integer] new volume
-  def change_volume(vol)
-    @volume = vol
-  end
-
-  command('help') do
-    aliases 'h'
-
-    def main(args)
-      ConsoleApplication_More.new('help text')
-      return 0
-    end
-  end
-
-  command('volume') do
-    aliases 'vol'
-
-    def main(args)
-      error _INTL('no volume given') if args.empty?
-      volume = validate_value 'i', args[0]
-      validate_range 0..100, volume
-      @session.change_volume(volume)
-      return 0
-    end
   end
 end
