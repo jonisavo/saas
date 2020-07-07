@@ -18,9 +18,10 @@ class ApplicationWindow < ConsoleWindow
     else
       raise ArgumentError, 'invalid argument(s) for ApplicationWindow'
     end
-    viewport.z = 9999
+    viewport.z = 99999
     super(session, viewport)
-    @border_sprite = BitmapSprite.new(viewport.rect.width, viewport.rect.height,@viewport)
+    @border_sprite = BitmapSprite.new(self.width,self.height,self.viewport)
+    @border_sprite.z = 9999
   end
 
   # Draws a border with the given thickness and color.
@@ -29,13 +30,13 @@ class ApplicationWindow < ConsoleWindow
   def drawBorder(thickness = 2,color = @textColor)
     @border_sprite.bitmap.clear
     # Top line
-    @border_sprite.bitmap.fill_rect(0,0,self.viewport.width,thickness,color)
+    @border_sprite.bitmap.fill_rect(0,0,self.width,thickness,color)
     # Bottom line
-    @border_sprite.bitmap.fill_rect(0,self.viewport.height-thickness,self.viewport.width,thickness,color)
+    @border_sprite.bitmap.fill_rect(0,self.height-thickness,self.width,thickness,color)
     # Left line
-    @border_sprite.bitmap.fill_rect(0,0,thickness,self.viewport.height,color)
+    @border_sprite.bitmap.fill_rect(0,0,thickness,self.height,color)
     # Right line
-    @border_sprite.bitmap.fill_rect(self.viewport.width-thickness,0,thickness,self.viewport.height,color)
+    @border_sprite.bitmap.fill_rect(self.width-thickness,0,thickness,self.height,color)
   end
 
   # Moves the text entry sprite to the given coordinates.
@@ -63,84 +64,174 @@ class ApplicationWindow < ConsoleWindow
   def dispose
     super
     @border_sprite.dispose
-    @viewport.dispose
-  end
-
-  private
-
-  # TODO Modify these functions.
-
-  # Does the actual drawing.
-  # @param text [String] text to draw
-  # @param align [Integer] text alignment
-  # @param replace [Boolean] whether text should be replaced
-  # @param raw [Boolean] whether \n and \t should be ignored
-  def draw_internal(text,align=0,replace=false,raw=false)
-    if raw
-      print_lines = [text]
-    else
-      text.gsub!('\t','   ')
-      print_lines = text.split('\n',-1)
-      # Check for highlights in the first line
-      if print_lines[0].include?('\\h')
-        print_lines[0].gsub!('\\h','')
-        @lines.last.enable_highlight(align)
-      end
-    end
-    # Write the first line
-    if replace
-      @lines.last.replace(print_lines[0],align)
-    else
-      @lines.last.write(print_lines[0],align)
-    end
-    return if print_lines.length < 2
-    for i in 1...print_lines.length
-      # Check for highlights for all other lines
-      if !raw && print_lines[i].include?('\\h')
-        print_lines[i].gsub!('\\h','')
-        highlight = true
-      else
-        highlight = false
-      end
-      # Create new line sprites for all new lines
-      @lines << ConsoleLineSprite.new(self,print_lines[i],align,highlight)
-    end
-  end
-
-  # Repositions each line.
-  def reposition_lines
-    @lines.each_with_index do |spr,i|
-      spr.y = CONSOLE_LINE_HEIGHT * i
-    end
-    if @lines.length > @max_lines
-      @lines.each { |spr| spr.move_up(@lines.length - @max_lines) }
-      @lines.each_with_index do |spr,i|
-        if spr.y < -CONSOLE_LINE_HEIGHT
-          spr.dispose
-          @lines.delete_at(i)
-        end
-      end
-    end
   end
 end
 
-class Window_CommandApplication < Window_CommandPokemonEx
+# A version of Window_DrawableCommand that does not have any animated arrows.
+# Also, the cursor is disabled by default, and can be set with the setCursor command.
+class Window_DrawableCommand_NoArrows < SpriteWindow_Selectable
+  attr_reader :baseColor
+  attr_reader :shadowColor
+
+  def textWidth(bitmap,text)
+    return tmpbitmap.text_size(i).width
+  end
+
+  def getAutoDims(commands,dims,width=nil)
+    rowMax = ((commands.length + self.columns - 1) / self.columns).to_i
+    windowheight = (rowMax*self.rowHeight)
+    windowheight += self.borderY
+    if !width || width<0
+      width=0
+      tmpbitmap = BitmapWrapper.new(1,1)
+      pbSetSystemFont(tmpbitmap)
+      for i in commands
+        width = [width,tmpbitmap.text_size(i).width].max
+      end
+      width += 16+SpriteWindow_Base::TEXTPADDING
+      width += 16 if self.hasCursor?
+      tmpbitmap.dispose
+    end
+    # Store suggested width and height of window
+    dims[0] = [self.borderX+1,(width*self.columns)+self.borderX+
+        (self.columns-1)*self.columnSpacing].max
+    dims[1] = [self.borderY+1,windowheight].max
+    dims[1] = [dims[1],Graphics.height].min
+  end
+
+  def initialize(x,y,width,height,viewport=nil)
+    super(x,y,width,height)
+    self.viewport = viewport if viewport
+    @index = 0
+    colors = getDefaultTextColors(self.windowskin)
+    @baseColor   = colors[0]
+    @shadowColor = colors[1]
+    refresh
+  end
+
+  def setCursor(filepath)
+    @selarrow.dispose unless @selarrow.disposed?
+    @selarrow = AnimatedBitmap.new(filepath)
+    refresh
+  end
+
+  def hasCursor?
+    return !(@selarrow.nil? || @selarrow.disposed?)
+  end
+
+  def drawCursor(index,rect)
+    if self.index==index && !@selarrow.nil?
+      pbCopyBitmap(self.contents,@selarrow.bitmap,rect.x,rect.y)
+      extra_width = 16
+    else
+      extra_width = 0
+    end
+    return Rect.new(rect.x+extra_width,rect.y,rect.width-extra_width,rect.height)
+  end
+
+  def dispose
+    @selarrow.dispose if !@selarrow.nil? && !@selarrow.disposed?
+    super
+  end
+
+  def baseColor=(value)
+    @baseColor = value
+    refresh
+  end
+
+  def shadowColor=(value)
+    @shadowColor = value
+    refresh
+  end
+
+  def itemCount # to be implemented by derived classes
+    return 0
+  end
+
+  def drawItem(index,count,rect) # to be implemented by derived classes
+  end
+
+  def refresh
+    @item_max = self.itemCount
+    dwidth  = self.width - self.borderX
+    dheight = self.height - self.borderY
+    self.contents = pbDoEnsureBitmap(self.contents,dwidth,dheight)
+    self.contents.clear
+    for i in 0...@item_max
+      if i<self.top_item || i>self.top_item+self.page_item_max
+        next
+      end
+      drawItem(i,@item_max,itemRect(i))
+    end
+  end
+
+  def update
+    oldindex = self.index
+    super
+    refresh if self.index!=oldindex
+  end
+end
+
+class Window_CommandConsole < Window_DrawableCommand_NoArrows
+  attr_reader :commands
+
   # Creates a new Window_CommandConsole object.
   # @param window [ApplicationWindow] window to bind to
   # @param choices [*String] window choices
   def initialize(window,*choices)
     @window = window
-    super(build_list(choices),window.width)
+    @starting = true
+    super(0,0,32,32)
     self.viewport = @window.viewport
+    self.width = @window.width
+    self.height = @window.height
+    @commands = list_filter(choices)
+    self.active = true
     self.windowskin = nil
+    self.baseColor = @window.textColor
+    self.shadowColor = nil
     self.contents.font.name = @window.fontName
     self.contents.font.size = 20
+    refresh
+    @starting = false
   end
 
   # Changes the command window's choices.
   # @param choices [Array<String>] new choices
   def setChoices(*choices)
-    self.commands = build_list(choices)
+    self.commands = list_filter(choices)
+  end
+
+  def index=(value)
+    super
+    refresh if !@starting
+  end
+
+  def commands=(value)
+    @commands = value
+    @item_max = commands.length
+    self.update_cursor_rect
+    self.refresh
+  end
+
+  def width=(value)
+    super
+    unless @starting
+      self.index = self.index
+      self.update_cursor_rect
+    end
+  end
+
+  def height=(value)
+    super
+    unless @starting
+      self.index = self.index
+      self.update_cursor_rect
+    end
+  end
+
+  def itemCount
+    return @commands ? @commands.length : 0
   end
 
   def drawItem(index,count,rect)
@@ -151,16 +242,17 @@ class Window_CommandApplication < Window_CommandPokemonEx
     else
       text_col = @window.textColor
     end
-    pbDrawShadowText(self.contents,rect.x,rect.y,rect.width,rect.height,@commands[index],text_col,nil)
+    pbDrawShadowText(self.contents,rect.x,rect.y,rect.width,rect.height,@commands[index],text_col,self.shadowColor)
   end
 
   private
 
-  # Builds the list of choices.
-  # This function should be overwritten by subclasses.
-  # @param [Array<String>] choices
-  # @return [Array<String>] list of choices
-  def build_list(choices)
+  # Takes the array of strings that was passed into the class's constructor, and
+  # returns a new, formatted array of strings.
+  # This function should be overwritten by subclasses, if necessary.
+  # @param choices [Array<String>] passed choices
+  # @return [Array<String>] formatted choices
+  def list_filter(choices)
     return choices
   end
 end
@@ -320,15 +412,24 @@ class ConsoleApplication < ConsoleSession
   end
 end
 
+class ConsoleCommand_Testmenu < ConsoleCommand
+  name 'testmenu'
+
+  def main(args)
+    ConsoleApplication_Menu.new
+    return 0
+  end
+end
+
 class ConsoleApplication_Menu < ConsoleApplication
   name 'menu'
   force_default_config
 
   def app_start
-    @list_window = ApplicationWindow.new(self,Graphics.width/2-128,Graphics.height/2-128,128,128)
+    @list_window = ApplicationWindow.new(self,Graphics.width/2-98,Graphics.height/2-128,196,160)
     @list_window.drawBorder(2)
-    @list = Window_CommandApplication.new(@list_window,_INTL('Start game'),_INTL('Continue'),_INTL('Options'),_INTL('Exit'))
-    @msg_window = ApplicationWindow.new(self,Graphics.width/2-128,Graphics.height-180,128,180)
+    @list = Window_CommandConsole.new(@list_window,_INTL('Start game'),_INTL('Continue'),_INTL('Options'),_INTL('Exit'))
+    @msg_window = ApplicationWindow.new(self,Graphics.width/2-90,Graphics.height-160,180,160)
   end
 
   def app_main
@@ -339,11 +440,11 @@ class ConsoleApplication_Menu < ConsoleApplication
       next unless Input.trigger?(Input::C)
       case @list.index
       when 0
-        @msg_window.print("Start game was pressed!")
+        @msg_window.print('Start game was pressed!\n')
       when 1
-        @msg_window.print("Continue was pressed!")
+        @msg_window.print('Continue was pressed!\n')
       when 2
-        @msg_window.print("Options was pressed!")
+        @msg_window.print('Options was pressed!\n')
       else
         break
       end
