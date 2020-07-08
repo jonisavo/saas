@@ -1024,36 +1024,33 @@ end
 # an array of ConsoleLineSprite objects as well as an instance of the
 # Window_TextEntry_Console class.
 class ConsoleWindow < Sprite
-  # Returns the current text color.
-  # @return [Color] the current text color
-  attr_reader :textColor
-  # Returns the current background color.
-  # @return [Color] the current background color
-  attr_reader :bgColor
-  # Returns the current font name.
-  # @return [String] the current font name
-  attr_reader :fontName
   # Returns an array of drawn lines.
   # @return [Array<ConsoleLineSprite>] drawn lines
   attr_reader :lines
+  # Returns the window's width.
+  # @return [Integer] window width
+  attr_accessor :width
+  # Returns the window's height.
+  # @return [Integer] window height
+  attr_accessor :height
+
   
   # Creates a new ConsoleWindow object.
   # @param session [ConsoleSession] associated session
-  # @param viewport [Viewport] viewport to draw the window into
-  def initialize(session,viewport)
-    super(viewport)
+  # @param dims [Rect,Array<Integer>] window dimensions (x, y, width, height or Rect)
+  def initialize(session,*dims)
     @session = session
-    @background = BitmapSprite.new(
-      viewport.rect.width,viewport.rect.height,viewport
-    )
+    super(@session.viewport)
+    self.set_dimensions(*dims)
+    self.bitmap = Bitmap.new(self.width,self.height)
     # Get our background and text color from the config
-    @bgColor ||= @session.config.bgColor
-    @textColor ||= @session.config.textColor
-    @fontName ||= @session.config.fontName
+    @bg_color ||= @session.config.bgColor
+    @text_color ||= @session.config.textColor
+    @font_name ||= @session.config.fontName
     # Draw the background color, and text entry field
-    @background.bitmap.fill_rect(@background.bitmap.rect,@bgColor)
+    self.bitmap.fill_rect(self.bitmap.rect,@bg_color)
     @text_entry = Window_TextEntry_Console.new(
-      self,"",0,0,self.viewport.rect.width,CONSOLE_LINE_HEIGHT*3
+      self,"",0,0,self.width,CONSOLE_LINE_HEIGHT*3
     )
     @text_entry.viewport = self.viewport
     @text_entry.visible = false
@@ -1061,21 +1058,39 @@ class ConsoleWindow < Sprite
     # amount of lines
     @lines = []
     @lines << ConsoleLineSprite.new(self)
-    @max_lines = self.viewport.rect.height/CONSOLE_LINE_HEIGHT
+    @max_lines = self.height/CONSOLE_LINE_HEIGHT
     self.reposition_entry
+  end
+
+  # Returns the current text color.
+  # @return [Color] the current text color
+  def textColor
+    return @text_color
+  end
+
+  # Returns the current background color.
+  # @return [Color] the current background color
+  def bgColor
+    return @bg_color
+  end
+
+  # Returns the current font name.
+  # @return [String] the current font name
+  def fontName
+    return @font_name
   end
   
   # Changes the window's background color.
   # @param color [Color] color to change the background to
   def change_bg_color(color)
-    @bgColor = color
-    @background.bitmap.fill_rect(@background.bitmap.rect,color)
+    @bg_color = color
+    self.bitmap.fill_rect(self.bitmap.rect,color)
   end
   
   # Changes the window's text color.
   # @param color [Color] color to change the text to
   def change_text_color(color)
-    @textColor = color
+    @text_color = color
     @text_entry.refresh
     self.redraw
   end
@@ -1083,7 +1098,7 @@ class ConsoleWindow < Sprite
   # Changes the current font.
   # @param fontname [String] new font
   def change_font_name(fontname)
-    @fontName = fontname
+    @font_name = fontname
     @text_entry.update_font
     self.redraw
   end
@@ -1116,10 +1131,26 @@ class ConsoleWindow < Sprite
   # Repositions the text entry field.
   def reposition_entry
     prompt_width = @lines.last.text_width
-    @text_entry.x = prompt_width - @text_entry.borderX/2
+    @text_entry.x = self.x + prompt_width - @text_entry.borderX/2
     @text_entry.y = @lines.last.y - 21
-    @text_entry.width = self.viewport.rect.width-@text_entry.x
+    @text_entry.width = self.width - @text_entry.x
     #@text_entry.recalculate_maxlength
+  end
+
+  # Sets the window's dimensions.
+  # @param dims [Rect,Array<Integer>] window dimensions (x, y, width, height or Rect)
+  def set_dimensions(*dims)
+    if dims[0].is_a?(Rect)
+      rect = dims[0]
+    elsif dims[0].is_a?(Integer) && dims[1].is_a?(Integer) && dims[2].is_a?(Integer) && dims[3].is_a?(Integer)
+      rect = Rect.new(dims[0],dims[1],dims[2],dims[3])
+    else
+      raise ArgumentError, 'invalid dimension(s) for ApplicationWindow: ' + dims.inspect
+    end
+    self.x = rect.x
+    self.y = rect.y
+    self.width = rect.width
+    self.height = rect.height
   end
   
   # Scrolls each line up by the specified amount.
@@ -1151,7 +1182,6 @@ class ConsoleWindow < Sprite
   def dispose
     @lines.each { |spr| spr.dispose }
     @text_entry.dispose
-    @background.dispose
     super
   end
   
@@ -1197,12 +1227,12 @@ class ConsoleWindow < Sprite
   # Repositions each line.
   def reposition_lines
     @lines.each_with_index do |spr,i|
-      spr.y = CONSOLE_LINE_HEIGHT * i
+      spr.y = self.y + CONSOLE_LINE_HEIGHT * i
     end
     if @lines.length > @max_lines
       @lines.each { |spr| spr.move_up(@lines.length - @max_lines) }
       @lines.each_with_index do |spr,i|
-        if spr.y < -CONSOLE_LINE_HEIGHT
+        if spr.y < self.y - CONSOLE_LINE_HEIGHT
           spr.dispose
           @lines.delete_at(i)
         end
@@ -1319,7 +1349,7 @@ class ConsoleSession
     end
     @config = $ShellOptions.shellConfigs[$ShellOptions.activeConfig]
     # Create the console window and set the available commands.
-    @window = ConsoleWindow.new(self,@viewport)
+    @window = ConsoleWindow.new(self,@viewport.rect)
     @prompt = @config.prompt
     @aliases = $ShellOptions.shellAliases
     @commands = {}
@@ -1443,7 +1473,13 @@ class ConsoleSession
       Input.update
     end
   end
-  
+
+  # Returns the main viewport of the session.
+  # @return [Viewport] session viewport
+  def viewport
+    return @viewport
+  end
+
   # Returns the command with the given name.
   # @param name [String] command name
   # @return [ConsoleCommand] command object

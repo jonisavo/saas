@@ -22,10 +22,8 @@ class ConsoleApplication_Restoretool < ConsoleSession
   name  'restoretool'
   
   def initialize
-    @viewport = Viewport.new(0,CONSOLE_LINE_HEIGHT*8,Graphics.width,Graphics.height-CONSOLE_LINE_HEIGHT*8)
+    @viewport = Viewport.new(0,0,Graphics.width,Graphics.height)
     @viewport.z = 99999
-    @info_port = Viewport.new(0, 0, Graphics.width, CONSOLE_LINE_HEIGHT*8)
-    @info_port.z = 99999
     # Get the active config. If none is found, use the default config.
     if !$ShellOptions.activeConfig || !$ShellOptions.shellConfigs.has_key?($ShellOptions.activeConfig)
       $ShellOptions.shellConfigs['default'] ||= ShellConfiguration.newDefault
@@ -33,8 +31,8 @@ class ConsoleApplication_Restoretool < ConsoleSession
     end
     @config = $ShellOptions.shellConfigs[$ShellOptions.activeConfig]
     # Create the console window and set the available commands.
-    @window = ConsoleWindow.new(self,@viewport)
-    @info_window = ConsoleWindow.new(self,@info_port)
+    @window = ConsoleWindow.new(self,0,CONSOLE_LINE_HEIGHT*8,Graphics.width,Graphics.height-CONSOLE_LINE_HEIGHT*8)
+    @info_window = ConsoleWindow.new(self,0,0,Graphics.width,CONSOLE_LINE_HEIGHT*8)
     @prompt = 'restoretool> '
     @aliases = {}
     @commands = {}
@@ -119,7 +117,6 @@ class ConsoleApplication_Restoretool < ConsoleSession
   def exit_session
     super
     @info_window.dispose
-    @info_port.dispose
   end
   
   # In addition to console commands with session set to 'restoretool',

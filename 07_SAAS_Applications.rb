@@ -7,27 +7,19 @@
 class ApplicationWindow < ConsoleWindow
   # Creates a new ApplicationWindow object.
   # @param session [ConsoleApplication] associated application session
-  # @param smth [Viewport,Rect,Array<Integer>] window dimensions (x, y, width, height or Rect) or a Viewport
-  def initialize(session,*smth)
-    if smth[0].is_a?(Viewport)
-      viewport = smth[0]
-    elsif smth[0].is_a?(Rect)
-      viewport = Viewport.new(smth[0])
-    elsif smth[0].is_a?(Integer) && smth[1].is_a?(Integer) && smth[2].is_a?(Integer) && smth[3].is_a?(Integer)
-      viewport = Viewport.new(smth[0],smth[1],smth[2],smth[3])
-    else
-      raise ArgumentError, 'invalid argument(s) for ApplicationWindow'
-    end
-    viewport.z = 99999
-    super(session, viewport)
+  # @param dims [Rect,Array<Integer>] window dimensions (x, y, width, height or Rect)
+  def initialize(session,*dims)
+    super(session,*dims)
     @border_sprite = BitmapSprite.new(self.width,self.height,self.viewport)
+    @border_sprite.x = self.x
+    @border_sprite.y = self.y
     @border_sprite.z = 9999
   end
 
   # Draws a border with the given thickness and color.
   # @param thickness [Integer] border thickness (in pixels)
   # @param color [Color] border color (optional, text color by default)
-  def drawBorder(thickness = 2,color = @textColor)
+  def draw_border(thickness = 2,color = @text_color)
     @border_sprite.bitmap.clear
     # Top line
     @border_sprite.bitmap.fill_rect(0,0,self.width,thickness,color)
@@ -45,19 +37,7 @@ class ApplicationWindow < ConsoleWindow
   def move_entry(x,y)
     @text_entry.x = x
     @text_entry.y = y - 21
-    @text_entry.width = self.viewport.rect.width-@text_entry.x
-  end
-
-  # Returns the width of the application window.
-  # @return [Integer] window width
-  def width
-    return self.viewport.rect.width
-  end
-
-  # Returns the height of the application window.
-  # @return [Integer] window height
-  def height
-    return self.viewport.rect.height
+    @text_entry.width = self.width-@text_entry.x
   end
 
   # Disposes the window.
@@ -70,7 +50,7 @@ end
 # A version of SpriteWindow_Selectable that removes the cursor sound effects.
 class SpriteWindow_Selectable_Console < SpriteWindow_Selectable
   def update
-    super
+    SpriteWindow_Base.instance_method(:update).bind(self).call
     if self.active and @item_max > 0 and @index >= 0 and !@ignore_input
       if Input.repeat?(Input::UP)
         if (Input.trigger?(Input::UP) && (@item_max%@column_max)==0) or
@@ -243,7 +223,7 @@ class Window_CommandConsole < Window_DrawableCommand_Console
   def initialize(window,*choices)
     @window = window
     @starting = true
-    super(0,0,32,32)
+    super(@window.x,@window.y,32,32)
     self.viewport = @window.viewport
     self.width = @window.width
     self.height = @window.height
@@ -488,8 +468,8 @@ class ConsoleApplication_Example < ConsoleApplication
   force_default_config
 
   def app_start
-    @list_window = ApplicationWindow.new(self,Graphics.width/2-98,Graphics.height/2-128,196,160)
-    @list_window.drawBorder(2)
+    @list_window = ApplicationWindow.new(self,Graphics.width/2-98,Graphics.height/2-160,196,160)
+    @list_window.draw_border(2)
     @list = Window_CommandConsole.new(@list_window,_INTL('Start game'),_INTL('Continue'),_INTL('Options'),_INTL('Exit'))
     @msg_window = ApplicationWindow.new(self,Graphics.width/2-90,Graphics.height-160,180,160)
   end
